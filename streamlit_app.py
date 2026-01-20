@@ -5,7 +5,7 @@ import numpy as np
 # --- CONFIGURATION DE L'INTERFACE QUÉBÉCOISE ---
 st.set_page_config(page_title="AutoValue QC - Évaluation Direction", layout="wide")
 
-st.title("🚗 AutoValue Pro - Québec")
+st.title("🚗 Outil d'évaluation par Benoît Lopez")
 st.subheader("Outil d'évaluation stratégique pour Directeur des Ventes")
 
 # --- ENTRÉE DES DONNÉES ---
