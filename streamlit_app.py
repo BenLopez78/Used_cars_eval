@@ -1,102 +1,91 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
 import requests
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="ExpertVentes QC - Analyseur Universel", layout="wide")
+st.set_page_config(page_title="AutoValue Pro v2", layout="wide")
 
-def decode_vin_universel(vin):
-    """Appel à l'API officielle pour décoder n'importe quel NIV"""
+def decode_vin_base(vin):
+    """Décode la base via API publique"""
     try:
         url = f"https://vpic.nhtsa.dot.gov/api/vehicles/decodevinvalues/{vin}?format=json"
-        response = requests.get(url, timeout=5)
-        data = response.json()['Results'][0]
-        
-        if data['Make'] == "":
-            return None
-            
+        data = requests.get(url, timeout=5).json()['Results'][0]
         return {
             "annee": data['ModelYear'],
             "marque": data['Make'].title(),
             "modele": data['Model'].title(),
-            "trim": data['Series'] if data['Series'] else "Base",
-            "moteur": f"{data['DisplacementL']}L {data['EngineCylinders']}cyl",
-            "type": data['BodyClass']
+            "trim_detecte": data['Series'] if data['Series'] else ""
         }
     except:
         return None
 
-# --- INTERFACE ---
-st.title("🚗 Analyseur de Marché Universel")
-st.markdown("### Évaluation de véhicule d'occasion au Québec")
+st.title("🚀 Évaluateur Expert v2.0")
 
+# --- ZONE DE SAISIE ---
 with st.sidebar:
-    st.header("Saisie du Véhicule")
-    vin_input = st.text_input("Numéro de série (NIV)", placeholder="Ex: WP1AB2A58...").upper()
-    km_input = st.number_input("Kilométrage actuel", min_value=0, value=50000, step=1000)
-    btn = st.button("Lancer l'Expertise", type="primary")
+    st.header("1. Identification")
+    vin_input = st.text_input("NIV du véhicule").upper()
+    km_input = st.number_input("Kilométrage", value=100000, step=1000)
+    
+    # On tente un décodage automatique en arrière-plan
+    info_auto = None
+    if len(vin_input) >= 17:
+        info_auto = decode_vin_base(vin_input)
 
-if btn and vin_input:
-    with st.spinner('Décodage du NIV et Analyse du marché...'):
-        vehicule = decode_vin_universel(vin_input)
+    st.markdown("---")
+    st.header("2. Ajustement Manuel")
+    # Si le NIV décode, on pré-remplit, sinon on laisse vide
+    annee = st.selectbox("Année", range(2026, 2010, -1), index=range(2026, 2010, -1).index(int(info_auto['annee'])) if info_auto else 7)
+    marque = st.text_input("Marque", value=info_auto['marque'] if info_auto else "")
+    modele = st.text_input("Modèle", value=info_auto['modele'] if info_auto else "")
+    trim = st.text_input("Version / Trim (ex: Sport, Laramie)", value=info_auto['trim_detecte'] if info_auto else "")
+    
+    st.header("3. Options Majeures")
+    has_leather = st.checkbox("Intérieur en cuir")
+    has_sunroof = st.checkbox("Toit panoramique / ouvrant")
+    has_tow = st.checkbox("Groupe Remorquage")
+    has_nav = st.checkbox("Écran 12 pouces / Navigation")
 
-    if vehicule:
-        # 1. AFFICHAGE IDENTITÉ
-        st.header(f"✅ {vehicule['annee']} {vehicule['marque']} {vehicule['modele']}")
-        col_a, col_b, col_c = st.columns(3)
-        col_a.write(f"**Version :** {vehicule['trim']}")
-        col_b.write(f"**Moteur :** {vehicule['moteur']}")
-        col_c.write(f"**Type :** {vehicule['type']}")
+    btn_analyser = st.button("Lancer l'Analyse Finale", type="primary")
 
-        st.markdown("---")
+# --- ZONE D'AFFICHAGE ---
+if btn_analyser:
+    # Calcul de la valeur avec logique d'options
+    # (Simulation basée sur le RAM 1500 2019 Sport)
+    prix_base_marche = 32000 # Prix pour un modèle de base
+    
+    # Ajout de valeur pour le Trim Sport et options
+    prime_trim = 4500 if "sport" in trim.lower() else 0
+    prime_options = (1500 if has_leather else 0) + (1000 if has_sunroof else 0) + (800 if has_tow else 0)
+    
+    # Ajustement KM (Moyenne 100k pour un 2019)
+    ajust_km = (km_input - 100000) * 0.15
+    
+    prix_final = prix_base_marche + prime_trim + prime_options - ajust_km
 
-        # 2. ANALYSE STATISTIQUE DU MARCHÉ (Logique algorithmique)
-        # On simule ici la fourchette basée sur les tendances actuelles du marché QC
-        st.subheader("📊 Valeur du Marché (Estimations Québec)")
-        
-        # Simulation d'un prix de base selon l'année (Algorithme de dépréciation simple pour le prototype)
-        base_val = 35000 if int(vehicule['annee']) > 2020 else 18000
-        if "Porsche" in vehicule['marque']: base_val += 15000
-        
-        # Ajustement KM (Moyenne 20k/an)
-        age = 2026 - int(vehicule['annee'])
-        km_theorique = age * 20000
-        diff_km = km_input - km_theorique
-        ajustement_km = diff_km * 0.15 # 0.15$ du km
+    # Affichage
+    st.header(f"Résultat : {annee} {marque} {modele} {trim}")
+    
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.metric("Valeur Marché Estimée", f"{prix_final:,.0f} $")
+    with c2:
+        st.metric("Ajustement Options", f"+{prime_trim + prime_options:,.0f} $")
+    with c3:
+        st.metric("Ajustement KM", f"-{ajust_km:,.0f} $")
 
-        prix_moyen = base_val - ajustement_km
-        
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Prix Min", f"{prix_moyen*0.85:,.0f} $")
-        c2.metric("Prix Max", f"{prix_moyen*1.15:,.0f} $")
-        c3.metric("Moyenne Demandée", f"{prix_moyen:,.0f} $")
-        c4.metric("Échantillon (QC)", "Calculé")
-
-        # 3. HISTORIQUE DES RÉCLAMATIONS (Simulé - Nécessite CARFAX pour le 'Live')
-        st.subheader("📋 Historique & Condition")
-        tab1, tab2 = st.tabs(["Réclamations d'assurance", "Points de vigilance (Défauts)"])
-        
-        with tab1:
-            st.warning("⚠️ Pour voir les montants exacts des accidents, vous devez lier votre clé API CARFAX.")
-            st.info("Simulation d'historique : Aucune réclamation majeure détectée via SAAQ (Données à confirmer).")
-
-        with tab2:
-            # Ici on pourrait connecter ChatGPT pour les défauts spécifiques
-            st.write(f"**Analyse pour le {vehicule['marque']} {vehicule['modele']} :**")
-            st.write("* Vérifier l'usure des freins et pneus (coût d'entretien élevé sur ce segment).")
-            st.write("* Inspecter les dossiers d'entretien pour la garantie prolongée.")
-            if km_input > 150000:
-                st.write("* Attention : Le kilométrage élevé nécessite une inspection de la suspension et des joints d'étanchéité.")
-
-        # 4. OFFRE D'ACHAT SUGGÉRÉE
-        st.markdown("---")
-        offre_finale = prix_moyen * 0.82 # Marge de 18% pour le garage
-        st.subheader("🎯 Offre de rachat suggérée (Trade-in)")
-        st.markdown(f"<h2 style='color: #2e7d32;'>{offre_finale:,.0f} $</h2>", unsafe_allow_html=True)
-        st.caption("Cette offre inclut votre marge bénéficiaire et les frais de reconditionnement standard.")
-
+    st.markdown("---")
+    
+    # Module Défauts Connus (Dynamique)
+    st.subheader("🔍 Points d'attention technique")
+    if "RAM" in marque.upper() and "2019" in str(annee):
+        st.warning("""
+        **Problèmes fréquents RAM 1500 (2019) :**
+        * **Collecteurs d'échappement :** Boulons qui cassent (bruit de claquement à froid).
+        * **Infiltration d'eau :** 3e feu de freinage arrière (fuite commune vers le ciel de toit).
+        * **Écran UConnect :** Bogues ou décollement de l'écran tactile.
+        """)
     else:
-        st.error("NIV invalide ou non reconnu. Veuillez vérifier les 17 caractères.")
-else:
-    st.info("Veuillez saisir un NIV et cliquer sur 'Lancer l'Expertise'.")
+        st.write("Aucun défaut majeur spécifique répertorié pour ce modèle exact. Procédez à une inspection standard.")
+
+    # Offre de rachat
+    st.success(f"### Offre de rachat suggérée : {(prix_final * 0.82):,.0f} $")
